@@ -250,7 +250,7 @@ def preprocess_image(image: Image.Image, target_size=IMAGE_SIZE):
 # ---------------------------
 
             
-            def predict_and_display(image, source_name, filename):
+def predict_and_display(image, source_name, filename):
     """Función para predecir y mostrar resultados con guardado seguro"""
     try:
         with st.spinner("🔄 Analizando imagen con IA..."):
