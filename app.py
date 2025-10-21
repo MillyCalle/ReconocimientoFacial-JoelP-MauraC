@@ -664,18 +664,24 @@ elif page == "👥 Administración de Personas":
 elif page == "📊 Dashboard Analítico":
     st.header("📊 Panel de Analítica y Estadísticas")
     
+    # Leer base de datos
     conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query('SELECT * FROM predictions', conn, parse_dates=['timestamp'])
+    df = pd.read_sql_query('SELECT * FROM predictions', conn)
     conn.close()
 
     if df.empty:
         st.info("📭 No hay predicciones registradas. Ve a **'🎥 Reconocimiento en Vivo'** para empezar a recopilar datos.")
         st.image("https://via.placeholder.com/800x400/667eea/ffffff?text=Sin+Datos+Disponibles", use_container_width=True)
     else:
+        # --- LIMPIEZA Y CONVERSIÓN DE TIPOS ---
+        df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+        df['confidence'] = df['confidence'].astype(float)
+        df['date'] = df['timestamp'].dt.date
+        df['hour'] = df['timestamp'].dt.hour
+
         # Métricas generales con diseño mejorado
         st.markdown("### 📈 Métricas Generales del Sistema")
         col1, col2, col3, col4, col5 = st.columns(5)
-        
         with col1:
             st.metric("🔢 Total Predicciones", len(df))
         with col2:
@@ -689,19 +695,17 @@ elif page == "📊 Dashboard Analítico":
 
         st.markdown("---")
         
-        # Mostrar datos completos
+        # Mostrar tabla completa
         with st.expander("📋 Ver Tabla Completa de Predicciones"):
             df_display = df.copy()
             df_display['confidence'] = df_display['confidence'].apply(lambda x: f"{x:.1%}")
-            df_display['timestamp'] = pd.to_datetime(df_display['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
+            df_display['timestamp'] = df_display['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
             st.dataframe(df_display, use_container_width=True, height=300)
 
         st.markdown("---")
         st.markdown("### 📊 Visualizaciones Estadísticas")
-
-        # Configurar estilo de matplotlib
         plt.style.use('seaborn-v0_8-darkgrid')
-        
+
         # GRÁFICA 1 y 2
         col1, col2 = st.columns(2)
         
@@ -741,8 +745,6 @@ elif page == "📊 Dashboard Analítico":
             st.markdown("#### 3️⃣ Histograma de Distribución de Confianza")
             fig3, ax3 = plt.subplots(figsize=(10, 6))
             n, bins, patches = ax3.hist(df['confidence'], bins=25, edgecolor='black', alpha=0.8)
-            
-            # Colorear barras según el rango
             for i, patch in enumerate(patches):
                 if bins[i] < 0.5:
                     patch.set_facecolor('#ff6b6b')
@@ -750,7 +752,6 @@ elif page == "📊 Dashboard Analítico":
                     patch.set_facecolor('#ffd93d')
                 else:
                     patch.set_facecolor('#6bcf7f')
-            
             ax3.set_xlabel('Nivel de Confianza', fontsize=12, fontweight='bold')
             ax3.set_ylabel('Frecuencia', fontsize=12, fontweight='bold')
             ax3.set_title('Distribución de Precisión del Modelo', fontsize=14, fontweight='bold', pad=20)
@@ -763,9 +764,7 @@ elif page == "📊 Dashboard Analítico":
 
         with col4:
             st.markdown("#### 4️⃣ Timeline de Reconocimientos")
-            df['date'] = pd.to_datetime(df['timestamp']).dt.date
             series = df.groupby('date').size()
-            
             fig4, ax4 = plt.subplots(figsize=(10, 6))
             series.plot(ax=ax4, marker='o', color='#667eea', linewidth=3, markersize=8)
             ax4.fill_between(series.index, series.values, alpha=0.3, color='#667eea')
@@ -779,21 +778,16 @@ elif page == "📊 Dashboard Analítico":
 
         # GRÁFICA 5
         st.markdown("#### 5️⃣ Patrón de Reconocimientos por Hora del Día")
-        df['hour'] = pd.to_datetime(df['timestamp']).dt.hour
         hour_counts = df.groupby('hour').size().reindex(range(24), fill_value=0)
-        
         fig5, ax5 = plt.subplots(figsize=(14, 5))
         colors5 = plt.cm.viridis(hour_counts / hour_counts.max())
         bars = ax5.bar(hour_counts.index, hour_counts.values, color=colors5, edgecolor='black', linewidth=1.5)
-        
-        # Agregar valores en las barras
         for bar in bars:
             height = bar.get_height()
             if height > 0:
                 ax5.text(bar.get_x() + bar.get_width()/2., height,
                         f'{int(height)}',
                         ha='center', va='bottom', fontweight='bold', fontsize=10)
-        
         ax5.set_ylabel('Cantidad de Reconocimientos', fontsize=12, fontweight='bold')
         ax5.set_xlabel('Hora del Día (24h)', fontsize=12, fontweight='bold')
         ax5.set_title('Actividad por Hora - Identificación de Patrones Temporales', fontsize=14, fontweight='bold', pad=20)
@@ -802,6 +796,7 @@ elif page == "📊 Dashboard Analítico":
         ax5.grid(axis='y', alpha=0.3)
         plt.tight_layout()
         st.pyplot(fig5)
+
 
         # Análisis adicional
         st.markdown("---")
