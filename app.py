@@ -248,73 +248,67 @@ def preprocess_image(image: Image.Image, target_size=IMAGE_SIZE):
 # ---------------------------
 # FUNCIÓN DE PREDICCIÓN
 # ---------------------------
-def predict_and_display(image, source_name, filename):
-    """Función reutilizable para hacer predicciones y mostrar resultados"""
+
+            
+            def predict_and_display(image, source_name, filename):
+    """Función para predecir y mostrar resultados con guardado seguro"""
     try:
         with st.spinner("🔄 Analizando imagen con IA..."):
             # Preprocesar imagen
             processed = preprocess_image(image, IMAGE_SIZE)
-            
+
             # Hacer predicción
             predictions = model.predict(processed, verbose=0)[0]
             
+            # Debug
+            print(f"🔹 Labels cargadas: {labels}")
+            print(f"🔹 Predicciones: {predictions}")
+
             # Obtener resultado principal
             top_idx = int(np.argmax(predictions))
             top_label = labels[top_idx]
             top_conf = float(predictions[top_idx])
-            
-            # Contenedor principal con diseño mejorado
+
+            # Contenedor principal con diseño
             st.markdown("<div class='info-card'>", unsafe_allow_html=True)
-            
+
             # Mostrar resultado principal
             st.markdown("### 🎯 Identificación Detectada")
             st.markdown(f"<div class='big-label'>👤 {top_label}</div>", unsafe_allow_html=True)
-            
-            # Barra de confianza con color dinámico
+
+            # Barra de confianza
             st.progress(top_conf)
-            
-            # Color según confianza
-            if top_conf >= 0.8:
-                conf_color = "🟢"
-            elif top_conf >= 0.5:
-                conf_color = "🟡"
-            else:
-                conf_color = "🔴"
-            
+
+            # Indicador de color según confianza
+            conf_color = "🟢" if top_conf >= 0.8 else "🟡" if top_conf >= 0.5 else "🔴"
             st.markdown(f"### {conf_color} Nivel de Confianza: **{top_conf:.1%}**")
-            
-            # Buscar información de la persona
+
+            # Información de la persona
             conn = sqlite3.connect(DB_PATH)
             df_people = pd.read_sql_query('SELECT * FROM people', conn)
             conn.close()
-            
+
             threshold = 0.5
             person_info = df_people[df_people['label'] == top_label]
-            
+
             if not person_info.empty:
                 person = person_info.iloc[0]
                 threshold = float(person['threshold'])
-                
+
                 st.markdown("---")
                 st.markdown("#### 📋 Información de la Persona")
-                
+
                 col_a, col_b = st.columns(2)
                 with col_a:
-                    st.markdown(f"""
-                    **👤 Nombre:** {person['name']}  
-                    **💼 Rol:** {person['role']}  
-                    """)
+                    st.markdown(f"**👤 Nombre:** {person['name']}  \n**💼 Rol:** {person['role']}")
                 with col_b:
-                    st.markdown(f"""
-                    **📧 Email:** {person['email']}  
-                    **📊 Umbral:** {threshold:.0%}
-                    """)
-                
+                    st.markdown(f"**📧 Email:** {person['email']}  \n**📊 Umbral:** {threshold:.0%}")
+
                 if top_conf >= threshold:
                     st.success(f"✅ **Persona reconocida correctamente** (Confianza: {top_conf:.1%} ≥ {threshold:.0%})")
                 else:
                     st.warning(f"⚠️ **Confianza por debajo del umbral** ({top_conf:.1%} < {threshold:.0%})")
-                
+
                 if person['notes']:
                     st.info(f"📝 **Notas:** {person['notes']}")
             else:
@@ -323,48 +317,34 @@ def predict_and_display(image, source_name, filename):
                 else:
                     st.warning(f"⚠️ Confianza baja: {top_conf:.1%} (Umbral: {threshold:.0%})")
                 st.info("ℹ️ Esta persona no está registrada. Ve a **'👥 Administración'** para añadirla.")
-            
+
             st.markdown("</div>", unsafe_allow_html=True)
-            
-            # Mostrar top 3 predicciones en expander
+
+            # Mostrar top 3 predicciones
             with st.expander("📊 Ver Top 3 Predicciones Detalladas"):
                 top3_indices = np.argsort(predictions)[-3:][::-1]
-                
                 for i, idx in enumerate(top3_indices, 1):
                     label_name = labels[idx]
                     conf = predictions[idx]
-                    
                     col1, col2, col3 = st.columns([1, 3, 1])
-                    with col1:
-                        st.markdown(f"**#{i}**")
-                    with col2:
-                        st.markdown(f"**{label_name}**")
-                    with col3:
-                        st.markdown(f"**{conf:.1%}**")
+                    with col1: st.markdown(f"**#{i}**")
+                    with col2: st.markdown(f"**{label_name}**")
+                    with col3: st.markdown(f"**{conf:.1%}**")
                     st.progress(float(conf))
                     st.markdown("")
-            
-            # Botón para guardar con diseño mejorado
+
+            # BOTÓN: Guardar predicción
             st.markdown("---")
             col1, col2, col3 = st.columns([1, 2, 1])
             with col2:
-                if st.button("💾 Guardar Predicción en Base de Datos", 
-                           type="primary", 
-                           use_container_width=True,
-                           key=f"save_{source_name}_{datetime.now().timestamp()}"):
+                # Key fija por archivo para evitar problemas de recarga
+                if st.button("💾 Guardar Predicción en Base de Datos", key=f"save_{filename}"):
                     timestamp = datetime.now().isoformat()
-                    
-                    insert_prediction(
-                        timestamp=timestamp,
-                        source=source_name,
-                        filename=filename,
-                        label=top_label,
-                        confidence=top_conf
-                    )
-                    
+                    insert_prediction(timestamp, source_name, filename, top_label, top_conf)
                     st.success("✅ ¡Predicción guardada exitosamente en la base de datos!")
                     st.balloons()
-                    
+                    st.experimental_rerun()  # recarga la app para actualizar Analíticas
+
     except Exception as e:
         st.error(f"❌ Error al procesar la imagen: {str(e)}")
         with st.expander("🔍 Ver detalles del error"):
@@ -464,7 +444,7 @@ if page == "🎥 Reconocimiento en Vivo":
             with col2:
                 if camera_photo is None:
                     st.info("👈 Captura una foto con la cámara para comenzar el análisis")
-                    st.image("https://via.placeholder.com/400x300/667eea/ffffff?text=Esperando+Captura", use_container_width=True)
+                    st.image("https://placekitten.com/400/300", caption="Espereando captura", use_container_width=True)
                 else:
                     image = Image.open(camera_photo)
                     filename = f"cam_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
@@ -498,7 +478,8 @@ if page == "🎥 Reconocimiento en Vivo":
             with col2:
                 if uploaded_file is None:
                     st.info("👈 Sube una imagen para iniciar el reconocimiento")
-                    st.image("https://via.placeholder.com/400x300/764ba2/ffffff?text=Subir+Imagen", use_container_width=True)
+                    st.image("https://placekitten.com/400/300", caption="Sube tu imagen", use_container_width=True)
+
                 else:
                     image = Image.open(uploaded_file)
                     predict_and_display(image, "uploaded_file", uploaded_file.name)
