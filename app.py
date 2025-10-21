@@ -251,104 +251,42 @@ def preprocess_image(image: Image.Image, target_size=IMAGE_SIZE):
 
             
 def predict_and_display(image, source_name, filename):
-    """Función para predecir y mostrar resultados con guardado seguro"""
     try:
         with st.spinner("🔄 Analizando imagen con IA..."):
-            # Preprocesar imagen
             processed = preprocess_image(image, IMAGE_SIZE)
-
-            # Hacer predicción
             predictions = model.predict(processed, verbose=0)[0]
-            
-            # Debug
-            print(f"🔹 Labels cargadas: {labels}")
-            print(f"🔹 Predicciones: {predictions}")
-
-            # Obtener resultado principal
             top_idx = int(np.argmax(predictions))
             top_label = labels[top_idx]
             top_conf = float(predictions[top_idx])
 
-            # Contenedor principal con diseño
-            st.markdown("<div class='info-card'>", unsafe_allow_html=True)
+            # Mostrar resultado
+            st.markdown(f"### 👤 {top_label} - Confianza: {top_conf:.1%}")
 
-            # Mostrar resultado principal
-            st.markdown("### 🎯 Identificación Detectada")
-            st.markdown(f"<div class='big-label'>👤 {top_label}</div>", unsafe_allow_html=True)
-
-            # Barra de confianza
-            st.progress(top_conf)
-
-            # Indicador de color según confianza
-            conf_color = "🟢" if top_conf >= 0.8 else "🟡" if top_conf >= 0.5 else "🔴"
-            st.markdown(f"### {conf_color} Nivel de Confianza: **{top_conf:.1%}**")
-
-            # Información de la persona
-            conn = sqlite3.connect(DB_PATH)
-            df_people = pd.read_sql_query('SELECT * FROM people', conn)
-            conn.close()
-
-            threshold = 0.5
-            person_info = df_people[df_people['label'] == top_label]
-
-            if not person_info.empty:
-                person = person_info.iloc[0]
-                threshold = float(person['threshold'])
-
-                st.markdown("---")
-                st.markdown("#### 📋 Información de la Persona")
-
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    st.markdown(f"**👤 Nombre:** {person['name']}  \n**💼 Rol:** {person['role']}")
-                with col_b:
-                    st.markdown(f"**📧 Email:** {person['email']}  \n**📊 Umbral:** {threshold:.0%}")
-
-                if top_conf >= threshold:
-                    st.success(f"✅ **Persona reconocida correctamente** (Confianza: {top_conf:.1%} ≥ {threshold:.0%})")
-                else:
-                    st.warning(f"⚠️ **Confianza por debajo del umbral** ({top_conf:.1%} < {threshold:.0%})")
-
-                if person['notes']:
-                    st.info(f"📝 **Notas:** {person['notes']}")
-            else:
-                if top_conf >= threshold:
-                    st.success(f"✅ Reconocido como: **{top_label}** (Confianza: {top_conf:.1%})")
-                else:
-                    st.warning(f"⚠️ Confianza baja: {top_conf:.1%} (Umbral: {threshold:.0%})")
-                st.info("ℹ️ Esta persona no está registrada. Ve a **'👥 Administración'** para añadirla.")
-
-            st.markdown("</div>", unsafe_allow_html=True)
+            # Guardar predicción en base de datos
+            save_key = f"save_{filename}_{datetime.now().timestamp()}"
+            if st.button("💾 Guardar Predicción en DB", key=save_key):
+                try:
+                    insert_prediction(
+                        timestamp=datetime.now().isoformat(),
+                        source=source_name,
+                        filename=filename,
+                        label=top_label,
+                        confidence=top_conf
+                    )
+                    st.success("✅ Predicción guardada en DB")
+                    st.experimental_rerun()  # Recarga todo para que Analíticas se actualice
+                except Exception as e:
+                    st.error(f"❌ Error al guardar: {e}")
 
             # Mostrar top 3 predicciones
-            with st.expander("📊 Ver Top 3 Predicciones Detalladas"):
-                top3_indices = np.argsort(predictions)[-3:][::-1]
-                for i, idx in enumerate(top3_indices, 1):
-                    label_name = labels[idx]
-                    conf = predictions[idx]
-                    col1, col2, col3 = st.columns([1, 3, 1])
-                    with col1: st.markdown(f"**#{i}**")
-                    with col2: st.markdown(f"**{label_name}**")
-                    with col3: st.markdown(f"**{conf:.1%}**")
-                    st.progress(float(conf))
-                    st.markdown("")
-
-            # BOTÓN: Guardar predicción
-            st.markdown("---")
-            col1, col2, col3 = st.columns([1, 2, 1])
-            with col2:
-                # Key fija por archivo para evitar problemas de recarga
-                if st.button("💾 Guardar Predicción en Base de Datos", key=f"save_{filename}"):
-                    timestamp = datetime.now().isoformat()
-                    insert_prediction(timestamp, source_name, filename, top_label, top_conf)
-                    st.success("✅ ¡Predicción guardada exitosamente en la base de datos!")
-                    st.balloons()
-                    st.experimental_rerun()  # recarga la app para actualizar Analíticas
+            top3 = np.argsort(predictions)[-3:][::-1]
+            st.markdown("#### Top 3 predicciones")
+            for i, idx in enumerate(top3, 1):
+                st.write(f"{i}. {labels[idx]} - {predictions[idx]:.1%}")
 
     except Exception as e:
-        st.error(f"❌ Error al procesar la imagen: {str(e)}")
-        with st.expander("🔍 Ver detalles del error"):
-            st.code(str(e), language="text")
+        st.error(f"❌ Error: {e}")
+
 
 # ---------------------------
 # INICIALIZACIÓN
@@ -579,24 +517,20 @@ elif page == "👥 Administración de Personas":
             submitted = st.form_submit_button("💾 Guardar Persona", type="primary", use_container_width=True)
             
             if submitted:
-                if not label or not name:
-                    st.error("❌ Los campos **Etiqueta** y **Nombre** son obligatorios")
-                else:
+                try:
                     conn = sqlite3.connect(DB_PATH)
                     c = conn.cursor()
-                    try:
-                        c.execute('''INSERT OR REPLACE INTO people 
-                                     (label, name, email, role, threshold, notes) 
-                                     VALUES (?,?,?,?,?,?)''',
-                                  (label, name, email, role, threshold, notes))
-                        conn.commit()
-                        st.success(f"✅ **{name}** ha sido guardado correctamente en el sistema")
-                        st.balloons()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Error al guardar: {e}")
-                    finally:
-                        conn.close()
+                    c.execute('''INSERT OR REPLACE INTO people 
+                                (label, name, email, role, threshold, notes) 
+                                VALUES (?,?,?,?,?,?)''',
+                            (label, name, email, role, threshold, notes))
+                    conn.commit()
+                    conn.close()
+                    st.success(f"✅ {name} guardado correctamente")
+                    st.experimental_rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al guardar persona: {e}")
+
     
     # TAB 3: ELIMINAR
     with tab3:
