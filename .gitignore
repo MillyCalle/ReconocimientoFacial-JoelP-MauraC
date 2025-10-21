@@ -5,7 +5,6 @@ __pycache__/
 *.pyd
 .DS_Store
 .env
-*.h5
 *.mp4
 *.jpg
 *.png
