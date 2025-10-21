@@ -20,11 +20,28 @@ except ImportError:
 # ---------------------------
 # CONFIGURACIÓN
 # ---------------------------
+# Usar rutas relativas para compatibilidad con Streamlit Cloud
 DB_PATH = "predictions.db"
-MODEL_PATH = "model/keras_model.h5"
-LABELS_PATH = "model/labels.txt"
+MODEL_PATH = os.path.join("model", "keras_model.h5")
+LABELS_PATH = os.path.join("model", "labels.txt")
 IMAGE_SIZE = (224, 224)
 
+# Debug: Información del sistema de archivos
+print("=" * 60)
+print("🔍 INFORMACIÓN DE DEBUG DEL SISTEMA")
+print("=" * 60)
+print(f"📁 Directorio de trabajo actual: {os.getcwd()}")
+print(f"📂 Archivos en directorio raíz: {os.listdir('.')}")
+print(f"🔍 Ruta del modelo: {MODEL_PATH}")
+print(f"✅ Modelo existe: {os.path.exists(MODEL_PATH)}")
+print(f"🔍 Ruta de labels: {LABELS_PATH}")
+print(f"✅ Labels existe: {os.path.exists(LABELS_PATH)}")
+
+if os.path.exists("model"):
+    print(f"📂 Contenido de carpeta 'model/': {os.listdir('model')}")
+else:
+    print("❌ La carpeta 'model/' NO existe")
+print("=" * 60)
 # ---------------------------
 # PAGE CONFIG
 # ---------------------------
