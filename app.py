@@ -404,7 +404,7 @@ elif page == "👥 Administración de Personas":
     tab1, tab2, tab3, tab4 = st.tabs(["📋 Lista de Personas", "➕ Registrar Nueva", "✏️ Editar Persona", "🗑️ Eliminar Persona"])
     
     with tab1:
-        st.subheader("📋 Personas Registradas")
+       
         if df_people.empty:
             st.info("📭 No hay personas registradas")
         else:
@@ -440,18 +440,7 @@ elif page == "👥 Administración de Personas":
             st.markdown("---")
             st.markdown("### 📋 Tabla de Personas")
             
-            # Información sobre la Etiqueta del Modelo
-            with st.expander("ℹ️ ¿Qué es la 'Etiqueta del Modelo'?"):
-                st.markdown("""
-                La **Etiqueta del Modelo** es el nombre exacto que usaste en **Teachable Machine** 
-                para entrenar cada clase.
-                
-                **Ejemplos:**
-                - Si en TM nombraste la clase como `0 Joel Pesantez`, la etiqueta debe ser exactamente eso
-                - Si nombraste la clase como `Clase 1`, la etiqueta debe ser `Clase 1`
-                
-                ⚠️ **Debe coincidir EXACTAMENTE** (mayúsculas, espacios, todo)
-                """)
+            
             
             # Preparar DataFrame para visualización
             df_display = df_people.copy()
@@ -955,7 +944,7 @@ st.markdown("---")
 st.markdown("""
 <div class='footer'>
     <strong>🎓 Sistema de Reconocimiento Facial</strong><br>
-    Joel Pesantez & Maura Calle | Powered by Teachable Machine & Streamlit | © 2024
+    Joel Pesantez & Maura Calle | Powered by Teachable Machine & Streamlit | © 2025
 </div>
 """, unsafe_allow_html=True)
 
