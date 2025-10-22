@@ -175,8 +175,11 @@ def preprocess_image(image: Image.Image, target_size=IMAGE_SIZE):
 # ---------------------------
 # FUNCIÓN DE PREDICCIÓN
 # ---------------------------
+# ---------------------------
+# FUNCIÓN DE PREDICCIÓN MEJORADA
+# ---------------------------
 def predict_and_display(image, source_name, filename):
-    """Realiza la predicción y muestra los resultados"""
+    """Realiza la predicción y muestra los resultados con datos de la persona"""
     try:
         with st.spinner("🔄 Analizando imagen con IA..."):
             processed = preprocess_image(image, IMAGE_SIZE)
@@ -185,55 +188,62 @@ def predict_and_display(image, source_name, filename):
             top_label = labels[top_idx]
             top_conf = float(predictions[top_idx])
 
-            # Mostrar resultado principal
-            st.markdown(f"### 👤 {top_label}")
-            st.metric("Confianza", f"{top_conf:.1%}")
-
-            # Obtener umbral de la persona
-            try:
-                conn = sqlite3.connect(DB_PATH)
-                c = conn.cursor()
-                c.execute('SELECT threshold, name FROM people WHERE label = ?', (top_label,))
-                row = c.fetchone()
-                conn.close()
-                
-                threshold = float(row[0]) if row else 0.5
-                person_name = row[1] if row and row[1] else top_label
-                
-                # Indicador visual de umbral
-                if top_conf >= threshold:
-                    st.success(f"✅ Identificado: **{person_name}** (confianza {top_conf:.1%} ≥ umbral {threshold:.0%})")
-                else:
-                    st.warning(f"⚠️ Confianza por debajo del umbral ({top_conf:.1%} < {threshold:.0%})")
-                    
-                    # Sugerencia si el umbral es muy alto
-                    if threshold >= 0.9:
-                        st.error(f"""
-                        🚨 **Umbral demasiado alto ({threshold:.0%})**
-                        
-                        Este umbral es prácticamente imposible de alcanzar. Se recomienda:
-                        - Ir a **'👥 Administración'** → **'✏️ Editar Persona'**
-                        - Ajustar el umbral de **{person_name}** a **65%**
-                        """)
-            except:
-                threshold = 0.5
-
-            # Mostrar top 3 predicciones
-            st.markdown("#### Top 3 predicciones")
-            top3 = np.argsort(predictions)[-3:][::-1]
-            for i, idx in enumerate(top3, 1):
-                conf_value = float(predictions[idx])
-                conf_pct = conf_value * 100
-                st.progress(conf_value, text=f"{i}. {labels[idx]} - {conf_pct:.1f}%")
-
-            # GUARDADO AUTOMÁTICO si pasa el umbral
-            st.markdown("---")
+            # Obtener datos completos de la persona
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute('SELECT * FROM people WHERE label = ?', (top_label,))
+            person_data = c.fetchone()
+            conn.close()
             
-            # Checkbox para habilitar guardado automático
-            auto_save = st.checkbox("💾 Guardar automáticamente en BD", value=True, key=f"auto_{filename}")
+            # Si existe en la BD, extraer datos
+            if person_data:
+                person_id, label, name, email, role, threshold, notes = person_data
+                threshold = float(threshold)
+            else:
+                # Si no está registrada, usar valores por defecto
+                name = top_label
+                email = None
+                role = None
+                threshold = 0.5
+                notes = None
+            
+            # Indicador visual según confianza
+            if top_conf >= threshold:
+                st.success(f"✅ **IDENTIFICACIÓN EXITOSA**")
+            else:
+                st.warning(f"⚠️ **CONFIANZA BAJA** - {top_conf:.1%} < {threshold:.0%}")
+            
+            # Mostrar datos de la persona
+            st.markdown(f"### 👤 {name}")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write(f"**🏷️ Etiqueta:** `{top_label}`")
+                st.write(f"**📧 Email:** {email if email else 'No registrado'}")
+            
+            with col2:
+                st.write(f"**💼 Rol:** {role if role else 'No registrado'}")
+                st.write(f"**📊 Confianza:** {top_conf:.1%}")
+            
+            # Notas si existen
+            if notes:
+                st.info(f"📝 **Notas:** {notes}")
+            
+            # Si no está registrada
+            if not person_data:
+                st.warning("⚠️ Esta persona no está registrada. Ve a **'👥 Administración'** → **'➕ Registrar Nueva'**")
+            
+            st.markdown("---")
+
+            # GUARDADO AUTOMÁTICO
+            auto_save = st.checkbox(
+                "💾 Guardar automáticamente en BD", 
+                value=True, 
+                key=f"auto_{filename}"
+            )
             
             if auto_save and top_conf >= threshold:
-                # Verificar si ya se guardó esta predicción
                 save_key = f"{source_name}_{filename}_{top_label}_{top_conf:.4f}"
                 
                 if f'saved_{save_key}' not in st.session_state:
@@ -247,11 +257,11 @@ def predict_and_display(image, source_name, filename):
                     
                     if success:
                         st.session_state[f'saved_{save_key}'] = True
-                        st.success("✅ Predicción guardada automáticamente en BD")
+                        st.success("✅ Predicción guardada en BD")
                     else:
                         st.error("❌ Error al guardar")
                 else:
-                    st.info("ℹ️ Esta predicción ya fue guardada")
+                    st.info("ℹ️ Ya fue guardada")
             elif auto_save:
                 st.info(f"ℹ️ No se guarda: confianza {top_conf:.1%} < umbral {threshold:.0%}")
 
@@ -260,6 +270,7 @@ def predict_and_display(image, source_name, filename):
         import traceback
         with st.expander("🔍 Ver detalles del error"):
             st.code(traceback.format_exc())
+
 
 # ---------------------------
 # INICIALIZACIÓN
