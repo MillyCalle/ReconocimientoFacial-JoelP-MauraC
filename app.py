@@ -423,22 +423,65 @@ elif page == "👥 Administración de Personas":
                                 except Exception as e:
                                     st.error(f"Error: {e}")
             
+            # ========================================
+            # AQUÍ ESTÁ LA CORRECCIÓN: AGREGAR LA TABLA
+            # ========================================
+            st.markdown("---")
+            st.markdown("### 📋 Tabla de Personas")
+            
+            # Información sobre la Etiqueta del Modelo
+            with st.expander("ℹ️ ¿Qué es la 'Etiqueta del Modelo'?"):
+                st.markdown("""
+                La **Etiqueta del Modelo** es el nombre exacto que usaste en **Teachable Machine** 
+                para entrenar cada clase.
+                
+                **Ejemplos:**
+                - Si en TM nombraste la clase como `0 Joel Pesantez`, la etiqueta debe ser exactamente eso
+                - Si nombraste la clase como `Clase 1`, la etiqueta debe ser `Clase 1`
+                
+                ⚠️ **Debe coincidir EXACTAMENTE** (mayúsculas, espacios, todo)
+                """)
+            
+            # Preparar DataFrame para visualización
+            df_display = df_people.copy()
+            df_display['threshold'] = df_display['threshold'].apply(lambda x: f"{x:.0%}")
+            
+            # Reordenar columnas para mejor visualización
+            columns_order = ['name', 'label', 'threshold', 'email', 'role', 'notes']
+            df_display = df_display[columns_order]
+            
+            # Renombrar columnas para mejor lectura
+            df_display.columns = ['👤 Nombre', '🏷️ Etiqueta', '📊 Umbral', '📧 Email', '💼 Rol', '📝 Notas']
+            
+            # Mostrar tabla con formato
+            st.dataframe(
+                df_display,
+                use_container_width=True,
+                hide_index=True,
+                height=400
+            )
+            
+            # Estadísticas adicionales
+            st.markdown("---")
+            st.markdown("### 📊 Resumen")
+            
+            col_stat1, col_stat2, col_stat3 = st.columns(3)
+            
+            with col_stat1:
+                st.info(f"**Total de personas:** {len(df_people)}")
+            
+            with col_stat2:
+                with_email = len(df_people[df_people['email'].notna() & (df_people['email'] != '')])
+                st.info(f"**Con email:** {with_email}")
+            
+            with col_stat3:
+                with_role = len(df_people[df_people['role'].notna() & (df_people['role'] != '')])
+                st.info(f"**Con rol asignado:** {with_role}")
             # Mostrar explicación de la Etiqueta del Modelo
            
     
     with tab2:
         st.subheader("➕ Registrar Nueva Persona")
-        
-        
-        
-        # Mostrar clases disponibles en el modelo
-        if model is not None and labels:
-            with st.expander("🔍 Ver clases disponibles en el modelo"):
-                st.write("**Etiquetas que el modelo puede reconocer:**")
-                for idx, label in enumerate(labels):
-                    is_registered = label in df_people['label'].values if not df_people.empty else False
-                    status = "✅ Ya registrada" if is_registered else "⚠️ No registrada"
-                    st.write(f"{idx + 1}. `{label}` - {status}")
         
         with st.form("person_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
