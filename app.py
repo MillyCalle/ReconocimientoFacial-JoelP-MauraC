@@ -212,7 +212,7 @@ def predict_and_display(image, source_name, filename):
                         🚨 **Umbral demasiado alto ({threshold:.0%})**
                         
                         Este umbral es prácticamente imposible de alcanzar. Se recomienda:
-                        - Ir a **'👥 Administración'** → **'📋 Lista'**
+                        - Ir a **'👥 Administración'** → **'✏️ Editar Persona'**
                         - Ajustar el umbral de **{person_name}** a **65%**
                         """)
             except:
@@ -389,7 +389,8 @@ elif page == "👥 Administración de Personas":
 
     st.markdown("---")
     
-    tab1, tab2, tab3 = st.tabs(["📋 Lista de Personas", "➕ Registrar Nueva", "🗑️ Eliminar Persona"])
+    # AGREGAR TAB DE EDICIÓN
+    tab1, tab2, tab3, tab4 = st.tabs(["📋 Lista de Personas", "➕ Registrar Nueva", "✏️ Editar Persona", "🗑️ Eliminar Persona"])
     
     with tab1:
         st.subheader("📋 Personas Registradas")
@@ -422,24 +423,29 @@ elif page == "👥 Administración de Personas":
                                 except Exception as e:
                                     st.error(f"Error: {e}")
             
-            st.dataframe(df_people, use_container_width=True, height=400)
+            # Mostrar explicación de la Etiqueta del Modelo
+           
     
     with tab2:
         st.subheader("➕ Registrar Nueva Persona")
         
-        # Alerta de umbrales recomendados
-        st.info("""
-        📊 **Umbrales Recomendados:**
-        - 🟢 **50-65%**: Uso general (recomendado)
-        - 🟡 **70-80%**: Alta precisión
-        - 🔴 **90-100%**: Muy estricto (puede no guardar nunca)
-        """)
+        
+        
+        # Mostrar clases disponibles en el modelo
+        if model is not None and labels:
+            with st.expander("🔍 Ver clases disponibles en el modelo"):
+                st.write("**Etiquetas que el modelo puede reconocer:**")
+                for idx, label in enumerate(labels):
+                    is_registered = label in df_people['label'].values if not df_people.empty else False
+                    status = "✅ Ya registrada" if is_registered else "⚠️ No registrada"
+                    st.write(f"{idx + 1}. `{label}` - {status}")
         
         with st.form("person_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
             
             with col1:
-                label = st.text_input("🏷️ Etiqueta del Modelo *", placeholder="Ej: 0 Joel Pesantez")
+                label = st.text_input("🏷️ Etiqueta del Modelo *", placeholder="Ej: 0 Joel Pesantez",
+                                     help="Debe coincidir EXACTAMENTE con el nombre de la clase en Teachable Machine")
                 name = st.text_input("👤 Nombre Completo *", placeholder="Ej: Joel Pesantez")
                 email = st.text_input("📧 Email", placeholder="ejemplo@email.com")
             
@@ -478,7 +484,115 @@ elif page == "👥 Administración de Personas":
                     except Exception as e:
                         st.error(f"❌ Error: {e}")
     
+    # TAB 3: EDITAR PERSONA
     with tab3:
+        st.subheader("✏️ Editar Persona")
+        
+        if df_people.empty:
+            st.info("📭 No hay personas para editar")
+        else:
+            edit_label = st.selectbox(
+                "Selecciona la persona a editar",
+                ["-- Seleccionar --"] + list(df_people['label']),
+                key="edit_select"
+            )
+            
+            if edit_label != "-- Seleccionar --":
+                # Obtener datos actuales
+                person = df_people[df_people['label'] == edit_label].iloc[0]
+                
+                st.markdown("---")
+                st.markdown(f"### Editando: **{person['name']}**")
+                st.info(f"**Etiqueta actual:** `{person['label']}`")
+                
+                with st.form("edit_person_form", clear_on_submit=False):
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        new_label = st.text_input("🏷️ Etiqueta del Modelo *", value=person['label'],
+                                                 help="⚠️ Solo cambiar si también cambias el nombre en Teachable Machine")
+                        new_name = st.text_input("👤 Nombre Completo *", value=person['name'] if pd.notna(person['name']) else "")
+                        new_email = st.text_input("📧 Email", value=person['email'] if pd.notna(person['email']) else "")
+                    
+                    with col2:
+                        new_role = st.text_input("💼 Rol", value=person['role'] if pd.notna(person['role']) else "")
+                        new_threshold = st.slider("📊 Umbral de Confianza", 0.0, 1.0, 
+                                                 float(person['threshold']) if pd.notna(person['threshold']) else 0.65, 
+                                                 0.05,
+                                                 help="⚠️ Valores muy altos (>90%) impedirán el guardado automático")
+                        new_notes = st.text_area("📝 Notas", value=person['notes'] if pd.notna(person['notes']) else "")
+                    
+                    # Advertencia visual según el umbral
+                    if new_threshold >= 0.9:
+                        st.warning(f"⚠️ Umbral muy alto ({new_threshold:.0%}). Es posible que nunca se guarden predicciones.")
+                    elif new_threshold >= 0.8:
+                        st.info(f"ℹ️ Umbral alto ({new_threshold:.0%}). Solo se guardarán detecciones muy precisas.")
+                    else:
+                        st.success(f"✅ Umbral óptimo ({new_threshold:.0%}).")
+                    
+                    # Advertencia si cambió la etiqueta
+                    if new_label != edit_label:
+                        st.warning("""
+                        ⚠️ **Estás cambiando la etiqueta del modelo**
+                        
+                        **Consecuencias:**
+                        - Las nuevas predicciones usarán la nueva etiqueta
+                        - Las predicciones antiguas mantendrán la etiqueta vieja
+                        - Asegúrate de que la nueva etiqueta coincida con Teachable Machine
+                        """)
+                    
+                    col_btn1, col_btn2 = st.columns(2)
+                    
+                    with col_btn1:
+                        update_btn = st.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True)
+                    
+                    with col_btn2:
+                        cancel_btn = st.form_submit_button("❌ Cancelar", use_container_width=True)
+                    
+                    if update_btn:
+                        if not new_label or not new_name:
+                            st.error("⚠️ La etiqueta y el nombre son obligatorios")
+                        else:
+                            try:
+                                conn = sqlite3.connect(DB_PATH)
+                                c = conn.cursor()
+                                
+                                # Si cambió la etiqueta, verificar que no exista otra persona con esa etiqueta
+                                if new_label != edit_label:
+                                    c.execute('SELECT COUNT(*) FROM people WHERE label=?', (new_label,))
+                                    if c.fetchone()[0] > 0:
+                                        st.error(f"❌ Ya existe una persona con la etiqueta '{new_label}'")
+                                        conn.close()
+                                    else:
+                                        # Actualizar incluyendo la etiqueta
+                                        c.execute('''UPDATE people 
+                                                    SET label=?, name=?, email=?, role=?, threshold=?, notes=?
+                                                    WHERE label=?''',
+                                                (new_label, new_name, new_email, new_role, new_threshold, new_notes, edit_label))
+                                        conn.commit()
+                                        conn.close()
+                                        st.success(f"✅ {new_name} actualizado correctamente")
+                                        st.balloons()
+                                        st.rerun()
+                                else:
+                                    # Actualizar sin cambiar la etiqueta
+                                    c.execute('''UPDATE people 
+                                                SET name=?, email=?, role=?, threshold=?, notes=?
+                                                WHERE label=?''',
+                                            (new_name, new_email, new_role, new_threshold, new_notes, edit_label))
+                                    conn.commit()
+                                    conn.close()
+                                    st.success(f"✅ {new_name} actualizado correctamente")
+                                    st.balloons()
+                                    st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Error al actualizar: {e}")
+                    
+                    if cancel_btn:
+                        st.rerun()
+    
+    # TAB 4: ELIMINAR
+    with tab4:
         st.subheader("🗑️ Eliminar Persona")
         
         if df_people.empty:
@@ -486,24 +600,45 @@ elif page == "👥 Administración de Personas":
         else:
             del_label = st.selectbox(
                 "Selecciona la persona",
-                ["-- Seleccionar --"] + list(df_people['label'])
+                ["-- Seleccionar --"] + list(df_people['label']),
+                key="delete_select"
             )
             
             if del_label != "-- Seleccionar --":
                 person = df_people[df_people['label'] == del_label].iloc[0]
-                st.warning(f"⚠️ Vas a eliminar a **{person['name']}**")
                 
-                if st.button("🗑️ Confirmar Eliminación", type="secondary"):
-                    try:
-                        conn = sqlite3.connect(DB_PATH)
-                        c = conn.cursor()
-                        c.execute('DELETE FROM people WHERE label=?', (del_label,))
-                        conn.commit()
-                        conn.close()
-                        st.success(f"✅ {person['name']} eliminado")
+                st.markdown("---")
+                
+                # Mostrar información de la persona
+                col_info1, col_info2 = st.columns(2)
+                with col_info1:
+                    st.write(f"**Nombre:** {person['name']}")
+                    st.write(f"**Etiqueta:** `{person['label']}`")
+                    st.write(f"**Email:** {person['email'] if pd.notna(person['email']) else 'N/A'}")
+                with col_info2:
+                    st.write(f"**Rol:** {person['role'] if pd.notna(person['role']) else 'N/A'}")
+                    st.write(f"**Umbral:** {person['threshold']:.0%}")
+                
+                st.warning(f"⚠️ **¿Estás seguro de eliminar a {person['name']}?**")
+                st.error("Esta acción no se puede deshacer. Solo se eliminará de la base de datos, no del modelo.")
+                
+                col_del1, col_del2 = st.columns(2)
+                with col_del1:
+                    if st.button("🗑️ Confirmar Eliminación", type="secondary", use_container_width=True):
+                        try:
+                            conn = sqlite3.connect(DB_PATH)
+                            c = conn.cursor()
+                            c.execute('DELETE FROM people WHERE label=?', (del_label,))
+                            conn.commit()
+                            conn.close()
+                            st.success(f"✅ {person['name']} eliminado correctamente")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Error: {e}")
+                
+                with col_del2:
+                    if st.button("❌ Cancelar", use_container_width=True):
                         st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Error: {e}")
 
 # ---------------------------
 # PÁGINA: ANALÍTICA
